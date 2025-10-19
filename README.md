@@ -1,8 +1,8 @@
 # Trabalho-do-professor-Vigno
 
-# Atualmente só funciona localmente
+Atualmente só funciona localmente
 
-#Como usar:
+Como usar:
 
 1. baixe e instale o python (link: https://www.python.org/downloads/)
 2. baixe a dependencia websockets para o python via linha de comando (pip install websockets)
