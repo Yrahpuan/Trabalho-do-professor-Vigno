@@ -345,7 +345,7 @@
         
         .theme-toggle {
             position: absolute;
-            top: 20px;
+            top: 5px;
             right: 20px;
             background: var(--bg-primary);
             border: none;
@@ -450,7 +450,7 @@
             <div class="users-sidebar">
                 <h3>Usuários Online</h3>
                 <div id="user-list">
-                    <div class="empty-state">Nenhum usuário online</div>
+                    <div class="empty-state"></div>
                 </div>
             </div>
         </div>
@@ -559,15 +559,19 @@
                     showChatScreen();
                     loadRoomList();
                     
-                    // Define o avatar do usuário
-                    ws.send(JSON.stringify({
-                        type: "set_avatar",
+                    // Enviar user_join imediatamente após conectar
+                    const joinMessage = {
+                        type: "user_join",
+                        nickname: nickname,
                         avatar: userAvatar
-                    }));
+                    };
+                    console.log("Enviando user_join:", joinMessage);
+                    ws.send(JSON.stringify(joinMessage));
                 };
 
                 ws.onmessage = function(event) {
                     try {
+                        console.log("Mensagem recebida:", event.data);
                         const data = JSON.parse(event.data);
                         handleMessage(data);
                     } catch (e) {
@@ -585,6 +589,7 @@
                 };
             } catch (error) {
                 console.error("Erro ao conectar:", error);
+                alert("Erro ao conectar ao servidor. Verifique se o servidor está rodando.");
             }
         }
 
@@ -608,11 +613,11 @@
             currentRoom = null;
             document.getElementById('current-room-display').textContent = 'Selecione uma sala';
             document.getElementById('online-count').textContent = '';
-            updateUserList([]); // Limpa a lista de usuários
+            updateUserList([]); // ← Adicione esta linha
         }
 
         function handleMessage(data) {
-            console.log("Mensagem recebida:", data);
+            //console.log("Mensagem recebida:", data);
             switch(data.type) {
                 case "message":
                     displayMessage(data.nickname, data.content, data.timestamp, data.avatar);
@@ -785,6 +790,8 @@
                     <span class="user-name">${user.nickname}</span>
                 </div>
             `).join('');
+            
+            updateOnlineCount(users.length);
         }
 
         function updateRoomList(rooms) {

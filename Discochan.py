@@ -27,16 +27,14 @@ async def handle_connection(websocket):
         "avatar": None
     }
 
-    #print(f"Novo cliente conectado: {client_id}")
-    #print(f"Total de clientes conectados: {len(connected_clients)}")
+    print(f"Novo cliente conectado: {client_id}")
+    print(f"Total de clientes conectados: {len(connected_clients)}")
 
-    try:
-        await send_all_users_list()
-        
+    try:   
         async for message in websocket:
             try:
                 data = json.loads(message)
-                #print(f"Mensagem recebida de {client_id}: {data['type']}")
+                print(f"Mensagem recebida de {client_id}: {data['type']}")
                 await handle_message(data, client_id)
             except json.JSONDecodeError as e:
                 print(f"Erro ao decodificar JSON: {e}")
@@ -59,28 +57,40 @@ async def handle_message(data, client_id):
 
         message_type = data["type"]
 
-        if message_type == "join":
+        if message_type == "user_join":
+            await handle_user_join(client, data)
+        elif message_type == "join":
             await handle_join(client, data)
         elif message_type == "message":
             await handle_chat_message(client, data)
         elif message_type == "list_rooms":
             await send_room_list(client)
-        elif message_type == "set_avatar":
-            await handle_set_avatar(client, data)
+        else:
+            print(f"Tipo de mensagem desconhecido: {message_type}")
     except Exception as e:
         print(f"Erro em handle_message: {e}")
 
-async def handle_set_avatar(client, data):
+async def handle_user_join(client, data):
     try:
-        avatar_url = data.get("avatar")
-        if avatar_url:
-            client["avatar"] = avatar_url
-            if client["nickname"]:
-                user_avatars[client["nickname"]] = avatar_url
-            #print(f"Avatar definido para {client['nickname']}")
-            await send_all_users_list()
+        nickname = data["nickname"]
+        avatar = data.get("avatar")
+        
+        print(f"Registrando usuário: {nickname}")
+        
+        client["nickname"] = nickname
+        client["avatar"] = avatar
+        
+        if avatar and nickname:
+            user_avatars[nickname] = avatar
+        
+        print(f"Usuário {nickname} registrado com sucesso")
+        
+        await send_room_list(client)
+        
+        await send_all_users_list()
+        
     except Exception as e:
-        print(f"Erro em handle_set_avatar: {e}")
+        print(f"Erro em handle_user_join: {e}")
 
 async def handle_join(client, data):
     try:
@@ -89,18 +99,19 @@ async def handle_join(client, data):
         nickname = data["nickname"]
         avatar = data.get("avatar")
 
-        #print(f"Usuário {nickname} entrando na sala {new_room}")
+        print(f"Usuário {nickname} entrando na sala {new_room}")
 
         if old_room and old_room in chat_rooms:
             if client["websocket"] in chat_rooms[old_room]:
                 chat_rooms[old_room].remove(client["websocket"])
-                await broadcast_user_left(old_room, client["nickname"])
+                if client["nickname"]:
+                    await broadcast_user_left(old_room, client["nickname"])
                 await send_user_list(old_room)
 
         if new_room not in chat_rooms:
             chat_rooms[new_room] = set()
             room_messages[new_room] = []
-            #print(f"Nova sala criada: {new_room}")
+            print(f"Nova sala criada: {new_room}")
             await broadcast_room_list()
 
         client["room"] = new_room
@@ -112,13 +123,11 @@ async def handle_join(client, data):
             user_avatars[nickname] = avatar
 
         await send_room_history(client, new_room)
-
         await broadcast_user_joined(new_room, nickname)
         await send_user_list(new_room)
-        
         await send_all_users_list()
         
-        #print(f"Usuário {nickname} entrou na sala {new_room} com sucesso")
+        print(f"Usuário {nickname} entrou na sala {new_room} com sucesso")
 
     except Exception as e:
         print(f"Erro em handle_join: {e}")
@@ -159,15 +168,17 @@ async def handle_disconnection(client_id):
     try:
         if client_id in connected_clients:
             client = connected_clients[client_id]
-            if client["room"] and client["room"] in chat_rooms:
-                if client["websocket"] in chat_rooms[client["room"]]:
-                    chat_rooms[client["room"]].remove(client["websocket"])
+            
+            for room_name, room_clients in chat_rooms.items():
+                if client["websocket"] in room_clients:
+                    room_clients.remove(client["websocket"])
                     if client["nickname"]:
-                        await broadcast_user_left(client["room"], client["nickname"])
-                    await send_user_list(client["room"])
+                        await broadcast_user_left(room_name, client["nickname"])
+                    await send_user_list(room_name)
+            
             del connected_clients[client_id]
-            #print(f"Cliente desconectado: {client_id}")
-            #print(f"Total de clientes conectados: {len(connected_clients)}")
+            print(f"Cliente desconectado: {client_id}")
+            print(f"Total de clientes conectados: {len(connected_clients)}")
             
             await send_all_users_list()
     except Exception as e:
@@ -224,7 +235,7 @@ async def send_all_users_list():
     try:
         users = []
         for client_id, client_info in connected_clients.items():
-            if client_info["nickname"]:  # Só inclui usuários com nickname
+            if client_info["nickname"]:
                 users.append({
                     "nickname": client_info["nickname"],
                     "avatar": client_info["avatar"]
@@ -247,6 +258,8 @@ async def send_all_users_list():
         
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+            
+        print(f"Lista de usuários enviada: {[user['nickname'] for user in users]}")
     except Exception as e:
         print(f"Erro em send_all_users_list: {e}")
 
@@ -307,7 +320,6 @@ async def main():
     try:
         async with websockets.serve(handle_connection, "localhost", 8765, ping_interval=20, ping_timeout=60):
             print("Servidor de chat rodando em ws://localhost:8765")
-            #print("Salas disponíveis:", list(chat_rooms.keys()))
             await asyncio.Future()  # Mantém o servidor rodando
     except Exception as e:
         print(f"Erro ao iniciar servidor: {e}")
